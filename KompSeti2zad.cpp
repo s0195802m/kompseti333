@@ -768,8 +768,130 @@ int main() {
     }
 
     WSACleanup();
+    return сервер:
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#define _WIN32_WINNT 0x501
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+
+#pragma comment(lib, "Ws2_32.lib")
+#define BUF_SIZE 1024
+
+using namespace std;
+
+int main() {
+    setlocale(LC_ALL, "rus");
+    cout << "\t HTTP-сервер\n";
+    for (int i = 0; i < 30; i++) cout << "=";
+    cout << "\n";
+
+    WSADATA ws;
+    if (WSAStartup(MAKEWORD(2, 2), &ws)) {
+        cerr << "Ошибка WSAStartup! \n" << WSAGetLastError();
+        return -1;
+    }
+
+    // Создаем сокет
+    SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener == INVALID_SOCKET) {
+        cerr << "Ошибка socket! \n" << WSAGetLastError();
+        WSACleanup();
+        return -1;
+    }
+
+    // Устанавливаем опцию переиспользования адреса
+    int optval = 1;
+    if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (char*)&optval, sizeof(optval)) == SOCKET_ERROR) {
+        cerr << "Ошибка setsockopt! \n" << WSAGetLastError();
+        closesocket(listener);
+        WSACleanup();
+        return -1;
+    }
+
+    // Настраиваем адрес сервера
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(8000);
+
+    // Привязываем сокет к адресу
+    if (bind(listener, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        cerr << "Ошибка bind! \n" << WSAGetLastError();
+        closesocket(listener);
+        WSACleanup();
+        return -1;
+    }
+
+    // Начинаем слушать порт
+    if (listen(listener, SOMAXCONN) == SOCKET_ERROR) {
+        cerr << "Ошибка listen! \n" << WSAGetLastError();
+        closesocket(listener);
+        WSACleanup();
+        return -1;
+    }
+
+    cout << "Сервер запущен на порту 8000\n";
+    cout << "Ожидание подключений...\n\n";
+
+    char buf[BUF_SIZE];
+
+    while (true) {
+        SOCKET sClient = accept(listener, NULL, NULL);
+        if (sClient == INVALID_SOCKET) {
+            cerr << "Ошибка accept! " << WSAGetLastError() << "\n";
+            continue;
+        }
+
+        // Получаем запрос
+        int len = recv(sClient, buf, BUF_SIZE - 1, 0);
+
+        if (len == SOCKET_ERROR) {
+            cerr << "Ошибка получения данных! " << WSAGetLastError() << "\n";
+            closesocket(sClient);
+            continue;
+        }
+
+        if (len == 0) {
+            cout << "Клиент отключился\n";
+            closesocket(sClient);
+            continue;
+        }
+
+        buf[len] = '\0';
+
+        // Формируем ответ (без вывода сырого запроса)
+        stringstream responseBody;
+        responseBody << "<html><body>"
+            << "<h1>C++ HTTP Server</h1>"
+            << "<p>Work with sockets is demonstrated successfully</p>"
+            << "</body></html>";
+
+        stringstream response;
+        response << "HTTP/1.1 200 OK\r\n"
+            << "Content-Type: text/html; charset=utf-8\r\n"
+            << "Content-Length: " << responseBody.str().length() << "\r\n"
+            << "Connection: close\r\n"
+            << "\r\n"
+            << responseBody.str();
+
+        // Отправляем ответ
+        int sendResult = send(sClient, response.str().c_str(), response.str().length(), 0);
+        if (sendResult == SOCKET_ERROR) {
+            cerr << "Ошибка отправки! " << WSAGetLastError() << "\n";
+        }
+
+        // Корректно закрываем соединение
+        shutdown(sClient, SD_SEND);
+        closesocket(sClient);
+        cout << "[+] Запрос обработан\n";
+    }
+
+    closesocket(listener);
+    WSACleanup();
     return 0;
 }
-
 
 
